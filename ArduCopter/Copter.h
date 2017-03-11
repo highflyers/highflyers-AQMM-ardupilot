@@ -4,6 +4,7 @@
 #define THISFIRMWARE "APM:Copter V3.4-dev"
 #define FIRMWARE_VERSION 3,4,0,FIRMWARE_VERSION_TYPE_DEV
 
+
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -93,6 +94,9 @@
 #include <AC_InputManager/AC_InputManager.h>        // Pilot input handling library
 #include <AC_InputManager/AC_InputManager_Heli.h>   // Heli specific pilot input handling library
 
+#include "string"
+
+using namespace std;
 // Configuration
 #include "defines.h"
 #include "config.h"
@@ -171,6 +175,7 @@ private:
     AP_Baro barometer;
     Compass compass;
     AP_InertialSensor ins;
+    char* p_measurement;
 
 #if CONFIG_SONAR == ENABLED
     RangeFinder sonar {serial_manager};
@@ -641,6 +646,12 @@ private:
     void send_pid_tuning(mavlink_channel_t chan);
     bool telemetry_delayed(mavlink_channel_t chan);
     void gcs_send_message(enum ap_message id);
+
+    void gcs_set_measurement(char* measurement);
+    char* gcs_get_measurement();
+    char* gps_get_data();
+    void gcs_send_measurement(char* data);
+
     void gcs_send_mission_item_reached_message(uint16_t mission_index);
     void gcs_data_stream_send(void);
     void gcs_check_input(void);
@@ -1059,8 +1070,17 @@ public:
     int8_t test_relay(uint8_t argc, const Menu::arg *argv);
     int8_t test_shell(uint8_t argc, const Menu::arg *argv);
     int8_t test_sonar(uint8_t argc, const Menu::arg *argv);
+    //char * get_measurement();
 
     int8_t reboot_board(uint8_t argc, const Menu::arg *argv);
+
+    AP_HAL::UARTDriver *pomiar_uart;
+    uint32_t pomiar_flag;
+    uint32_t pomiar_timeout;
+    void pomiar_setup();
+    void pomiar_loop();
+    void pomiar_send(const char *c);
+
 };
 
 #define MENU_FUNC(func) FUNCTOR_BIND(&copter, &Copter::func, int8_t, uint8_t, const Menu::arg *)

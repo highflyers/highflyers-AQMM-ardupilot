@@ -60,6 +60,7 @@ enum ap_message {
     MSG_HWSTATUS,
     MSG_WIND,
     MSG_RANGEFINDER,
+	MSG_MEASUREMENT,
     MSG_TERRAIN,
     MSG_BATTERY2,
     MSG_CAMERA_FEEDBACK,
@@ -173,6 +174,7 @@ public:
     */
     static void send_statustext_all(MAV_SEVERITY severity, const char *fmt, ...);
     static void send_statustext_chan(MAV_SEVERITY severity, uint8_t dest_chan, const char *fmt, ...);
+    static void send_measurement_message(MAV_SEVERITY severity,const char * data);
     static void send_statustext(MAV_SEVERITY severity, uint8_t dest_bitmask, const char *text);
     static void service_statustext(void);
 

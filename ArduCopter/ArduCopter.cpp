@@ -150,6 +150,7 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
 #ifdef USERHOOK_SUPERSLOWLOOP
     SCHED_TASK(userhook_SuperSlowLoop, 1,   75),
 #endif
+	SCHED_TASK(pomiar_loop,              1,    100)
 };
 
 
@@ -171,6 +172,8 @@ void Copter::setup()
     // setup initial performance counters
     perf_info_reset();
     fast_loopTimer = AP_HAL::micros();
+
+    pomiar_setup();
 }
 
 /*
@@ -643,5 +646,66 @@ void Copter::update_altitude()
         Log_Write_Control_Tuning();
     }
 }
+
+void Copter::pomiar_setup() {
+	pomiar_uart = serial_manager.find_serial(AP_SerialManager::SerialProtocol_None, 0);
+	pomiar_flag = 456;
+	pomiar_timeout = 20;
+}
+
+void Copter::pomiar_send(const char *c) {
+	for (int i = 0; i < 3; i++) {
+		gcs[i].send_statustext_all(MAV_SEVERITY_ALERT, c);
+	}
+	if (should_log(MASK_LOG_ANY)) {
+		Log_Write_Data(DATA_AP_STATE, ap.value);
+	}
+}
+
+void Copter::pomiar_loop() {
+	/*if (pomiar_uart == hal.uartE) {
+		if (pomiar_uart->is_initialized()) {
+			const char ok_message[49] = "Works fine.";
+			pomiar_uart->print('?');
+			uint32_t n = 0;
+			char str[128];
+			uint32_t timestart = AP_HAL::millis();
+			while((AP_HAL::millis() - timestart) < pomiar_timeout && n < 1) {
+				if(pomiar_uart->available() == 0)
+					continue;
+				int16_t r = pomiar_uart->read();
+				if(r != -1) {
+					str[n] = r;
+					++n;
+				}
+			}
+			str[n] = 0;
+			if(str[0] == '1')
+				p_measurement = const_cast<char*>("Switch 1");
+			else if(str[0] == '0')
+				p_measurement = const_cast<char*>("Switch 0");
+			else
+				p_measurement = const_cast<char*>("Timeout");
+		} else {
+			p_measurement =  const_cast<char*>("UART not initialized");
+			//pomiar_uart->begin(57600,1024,1024);
+		}
+	} else {
+		pomiar_uart = serial_manager.find_serial(
+				AP_SerialManager::SerialProtocol_None, 0);
+		p_measurement =  const_cast<char*>("UART not initialized");
+	}*/
+//	char * mes = new char[10];
+	static int n = 0;
+	char mes[10];
+	++n;
+	n %= 10;
+//	mes = (char *)" 160PPM";
+	sprintf(mes, " %d", n);
+	gcs_set_measurement(mes);
+	gcs_send_measurement(p_measurement);
+	pomiar_send(mes);
+}
+
 
 AP_HAL_MAIN_CALLBACKS(&copter);

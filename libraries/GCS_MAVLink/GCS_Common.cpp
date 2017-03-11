@@ -1172,6 +1172,21 @@ void GCS_MAVLINK::send_statustext(MAV_SEVERITY severity, uint8_t dest_bitmask, c
     // try and send immediately if possible
     service_statustext();
 }
+
+void GCS_MAVLINK::send_measurement_message(MAV_SEVERITY severity, const char * data){
+
+	const char *text = data;
+    if (dataflash_p != NULL) {
+        dataflash_p->Log_Write_Message(text);
+    }
+    for (uint8_t i=0; i<MAVLINK_COMM_NUM_BUFFERS; i++) {
+        if ((1U<<i) & mavlink_active) {
+            mavlink_channel_t chan = (mavlink_channel_t)(MAVLINK_COMM_0+i);
+            mavlink_msg_measurement_message_send(chan, text);
+        }
+    }
+
+}
 /*
     send a statustext message to specific MAVLink connections in a bitmask
  */

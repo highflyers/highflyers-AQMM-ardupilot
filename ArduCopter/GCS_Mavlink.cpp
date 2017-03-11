@@ -2,6 +2,7 @@
 
 #include "Copter.h"
 
+using namespace std;
 // default sensors are present and healthy: gyro, accelerometer, barometer, rate_control, attitude_stabilization, yaw_position, altitude control, x/y position control, motor_control
 #define MAVLINK_SENSOR_PRESENT_DEFAULT (MAV_SYS_STATUS_SENSOR_3D_GYRO | MAV_SYS_STATUS_SENSOR_3D_ACCEL | MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE | MAV_SYS_STATUS_SENSOR_ANGULAR_RATE_CONTROL | MAV_SYS_STATUS_SENSOR_ATTITUDE_STABILIZATION | MAV_SYS_STATUS_SENSOR_YAW_POSITION | MAV_SYS_STATUS_SENSOR_Z_ALTITUDE_CONTROL | MAV_SYS_STATUS_SENSOR_XY_POSITION_CONTROL | MAV_SYS_STATUS_SENSOR_MOTOR_OUTPUTS | MAV_SYS_STATUS_AHRS)
 
@@ -743,7 +744,10 @@ bool GCS_MAVLINK::try_send_message(enum ap_message id)
 
     case MSG_MAG_CAL_PROGRESS:
         copter.compass.send_mag_cal_progress(chan);
+
         break;
+    case MSG_MEASUREMENT:
+    	break;
 
     case MSG_MAG_CAL_REPORT:
         copter.compass.send_mag_cal_report(chan);
@@ -1985,6 +1989,10 @@ void GCS_MAVLINK::handleMessage(mavlink_message_t* msg)
         }
         break;
     }
+    case MAVLINK_MSG_ID_MEASUREMENT_MESSAGE:
+    	mavlink_measurement_message_t packet;
+    	mavlink_msg_measurement_message_decode(msg, &packet);
+    	break;
 
     case MAVLINK_MSG_ID_ADSB_VEHICLE:
 #if ADSB_ENABLED == ENABLED
@@ -2102,4 +2110,54 @@ void Copter::gcs_send_text_fmt(MAV_SEVERITY severity, const char *fmt, ...)
     va_end(arg_list);
     hal.util->vsnprintf((char *)str, sizeof(str), fmt, arg_list);
     GCS_MAVLINK::send_statustext(severity, 0xFF, str);
+}
+
+char * appendMessage(char * message, char * data){
+	char * result = new char[sizeof(message) + sizeof(data)];
+	unsigned int i =0;
+	for(; i < sizeof(message); i++){
+		result[i] = message[i];
+	}
+	int j = 0;
+	for(; i < sizeof(message)+sizeof(data); i++){
+		result[i] = data[j];
+		j++;
+	}
+	return result;
+}
+
+void Copter::gcs_send_measurement(char* data)
+{
+	char* message = gps_get_data();
+	message = appendMessage(message, (char *)"dane ");
+	message = appendMessage(message, data);
+	GCS_MAVLINK::send_measurement_message(MAV_SEVERITY_INFO, message);
+}
+
+void Copter::gcs_set_measurement(char* measurement){
+	this->p_measurement = measurement;
+}
+
+char* Copter::gcs_get_measurement(){
+	return p_measurement;
+}
+
+
+char*  Copter::gps_get_data(){
+	const Location location = gps.location();
+	char * message = new char[120];
+	char * data = new char[16];
+	itoa(location.alt, data, 10);
+	message = appendMessage(message, (char *)"wys");
+	message = appendMessage(message, data);
+	message = appendMessage(message, (char *)"*10^-2");
+	itoa(location.lat, data, 10);
+	message = appendMessage(message, (char *)"szer ");
+	message = appendMessage(message, data);
+	message = appendMessage(message, (char *)"*10^7");
+	itoa(location.lng, data, 10);
+	message = appendMessage(message, (char *)"dlg ");
+	message = appendMessage(message, data);
+	message = appendMessage(message, (char *)"*10^7");
+	return message;
 }

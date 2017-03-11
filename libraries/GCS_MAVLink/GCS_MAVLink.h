@@ -94,6 +94,7 @@ bool comm_is_idle(mavlink_channel_t chan);
 
 #define MAVLINK_USE_CONVENIENCE_FUNCTIONS
 #include "include/mavlink/v1.0/ardupilotmega/mavlink.h"
+#include "include/mavlink/v1.0/common/mavlink.h"
 
 // return a MAVLink variable type given a AP_Param type
 uint8_t mav_var_type(enum ap_var_type t);
