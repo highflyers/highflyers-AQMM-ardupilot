@@ -69,6 +69,7 @@ public:
         k_param_serial_manager, // Serial ports, AP_SerialManager
         k_param_notify, // Notify Library, AP_Notify
         k_param_cli_enabled, // Old (deprecated) command line interface
+        k_param_arming, // Arming checks
 
 
         // Sensor objects
@@ -185,7 +186,7 @@ public:
 
         // Misc Sub settings
         k_param_log_bitmask = 165,
-        k_param_arming_check,
+        k_param_arming_check, // deprecated, remove
         k_param_angle_max,
         k_param_rangefinder_gain,
         k_param_gps_hdop_good,
@@ -215,17 +216,8 @@ public:
         k_param_acro_balance_roll,
         k_param_acro_balance_pitch,
 
-
-        // AUX switch options
-        k_param_ch7_option, // Disabled
-        k_param_ch8_option, // Disabled
-        k_param_ch9_option, // Disabled
-        k_param_ch10_option, // Disabled
-        k_param_ch11_option, // Disabled
-        k_param_ch12_option, // Disabled
-
         // RPM Sensor
-        k_param_rpm_sensor, // Disabled
+        k_param_rpm_sensor = 232, // Disabled
 
         // RC_Mapper Library
         k_param_rcmap, // Disabled
@@ -235,10 +227,6 @@ public:
         k_param_radio_tuning_high, // Disabled
         k_param_radio_tuning_low, // Disabled
 
-        // Autotune parameters
-        k_param_autotune_axis_bitmask, // Disabled
-        k_param_autotune_aggressiveness, // Disabled
-        k_param_autotune_min_d, // Disabled
     };
 
     AP_Int16        format_version;
@@ -304,13 +292,7 @@ public:
     AP_Int16        radio_tuning_high;
     AP_Int16        radio_tuning_low;
 #endif
-    AP_Int8         ch7_option;
-    AP_Int8         ch8_option;
-    AP_Int8         ch9_option;
-    AP_Int8         ch10_option;
-    AP_Int8         ch11_option;
-    AP_Int8         ch12_option;
-    AP_Int8         arming_check;
+
     AP_Int8         disarm_delay;
 
     AP_Int8         fs_ekf_action;
@@ -366,13 +348,6 @@ public:
 
     AC_P            p_pos_xy;
     AC_P            p_alt_hold;
-
-    // Autotune
-#if AUTOTUNE_ENABLED == ENABLED
-    AP_Int8                 autotune_axis_bitmask;
-    AP_Float                autotune_aggressiveness;
-    AP_Float                autotune_min_d;
-#endif
 
     AP_Float                surface_depth;
     AP_Int8                 frame_configuration;

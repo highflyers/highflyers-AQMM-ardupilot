@@ -44,6 +44,7 @@ void Sub::init_rc_in()
     // set default dead zones
     default_dead_zones();
 
+#if CONFIG_HAL_BOARD != HAL_BOARD_SITL
     // initialize rc input to 1500 on control channels (rather than 0)
     for (int i = 0; i < 7; i++) {
         if (i == 4) {
@@ -52,6 +53,7 @@ void Sub::init_rc_in()
             hal.rcin->set_override(i, 1500);
         }
     }
+#endif
 
     // initialise throttle_zero flag
     ap.throttle_zero = true;
@@ -63,22 +65,13 @@ void Sub::init_rc_out()
     motors.set_update_rate(g.rc_speed);
     motors.set_loop_rate(scheduler.get_loop_rate_hz());
     motors.init((AP_Motors::motor_frame_class)g.frame_configuration.get(), (AP_Motors::motor_frame_type)0);
-
-    for (uint8_t i = 0; i < 5; i++) {
-        hal.scheduler->delay(20);
-        read_radio();
-    }
-
-    // setup correct scaling for ESCs like the UAVCAN PX4ESC which
-    // take a proportion of speed.
-    hal.rcout->set_esc_scaling(channel_throttle->get_radio_min(), channel_throttle->get_radio_max());
+    motors.set_throttle_range(channel_throttle->get_radio_min(), channel_throttle->get_radio_max());
 
     // check if we should enter esc calibration mode
     esc_calibration_startup_check();
 
     // enable output to motors
-    pre_arm_rc_checks();
-    if (ap.pre_arm_rc_check) {
+    if (arming.rc_check()) {
         enable_motor_output();
     }
 
@@ -92,34 +85,6 @@ void Sub::enable_motor_output()
     // enable motors
     motors.enable();
     motors.output_min();
-}
-
-void Sub::read_radio()
-{
-    static uint32_t last_update_ms = 0;
-    uint32_t tnow_ms = millis();
-
-    if (hal.rcin->new_input()) {
-        ap.new_radio_frame = true;
-        RC_Channels::set_pwm_all();
-
-        set_throttle_zero_flag(channel_throttle->get_control_in());
-
-        // flag we must have an rc receiver attached
-        if (!failsafe.rc_override_active) {
-            ap.rc_receiver_present = true;
-        }
-
-        // update output on any aux channels, for manual passthru
-        SRV_Channels::output_ch_all();
-
-        // pass pilot input through to motors (used to allow wiggling servos while disarmed on heli, single, coax copters)
-        radio_passthrough_to_motors();
-
-        float dt = (tnow_ms - last_update_ms)*1.0e-3f;
-        rc_throttle_control_in_filter.apply(channel_throttle->get_control_in(), dt);
-        last_update_ms = tnow_ms;
-    }
 }
 
 #define THROTTLE_ZERO_DEBOUNCE_TIME_MS 400
@@ -143,8 +108,41 @@ void Sub::set_throttle_zero_flag(int16_t throttle_control)
     }
 }
 
-// pass pilot's inputs to motors library (used to allow wiggling servos while disarmed on heli, single, coax copters)
-void Sub::radio_passthrough_to_motors()
+// save_trim - adds roll and pitch trims from the radio to ahrs
+void Sub::save_trim()
 {
-    motors.set_radio_passthrough(channel_roll->get_control_in()/1000.0f, channel_pitch->get_control_in()/1000.0f, channel_throttle->get_control_in()/1000.0f, channel_yaw->get_control_in()/1000.0f);
+    // save roll and pitch trim
+    float roll_trim = ToRad((float)channel_roll->get_control_in()/100.0f);
+    float pitch_trim = ToRad((float)channel_pitch->get_control_in()/100.0f);
+    ahrs.add_trim(roll_trim, pitch_trim);
+    Log_Write_Event(DATA_SAVE_TRIM);
+    gcs_send_text(MAV_SEVERITY_INFO, "Trim saved");
 }
+
+// auto_trim - slightly adjusts the ahrs.roll_trim and ahrs.pitch_trim towards the current stick positions
+// meant to be called continuously while the pilot attempts to keep the vehicle level
+void Sub::auto_trim()
+{
+    if (auto_trim_counter > 0) {
+        auto_trim_counter--;
+
+        // flash the leds
+        AP_Notify::flags.save_trim = true;
+
+        // calculate roll trim adjustment
+        float roll_trim_adjustment = ToRad((float)channel_roll->get_control_in() / 4000.0f);
+
+        // calculate pitch trim adjustment
+        float pitch_trim_adjustment = ToRad((float)channel_pitch->get_control_in() / 4000.0f);
+
+        // add trim to ahrs object
+        // save to eeprom on last iteration
+        ahrs.add_trim(roll_trim_adjustment, pitch_trim_adjustment, (auto_trim_counter == 0));
+
+        // on last iteration restore leds and accel gains to normal
+        if (auto_trim_counter == 0) {
+            AP_Notify::flags.save_trim = false;
+        }
+    }
+}
+

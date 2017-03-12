@@ -130,9 +130,6 @@ NOINLINE void Sub::send_extended_status1(mavlink_channel_t chan)
         control_sensors_present |= MAV_SYS_STATUS_SENSOR_OPTICAL_FLOW;
     }
 #endif
-    if (ap.rc_receiver_present) {
-        control_sensors_present |= MAV_SYS_STATUS_SENSOR_RC_RECEIVER;
-    }
 
     // all present sensors enabled by default except altitude and position control and motors which we will set individually
     control_sensors_enabled = control_sensors_present & (~MAV_SYS_STATUS_SENSOR_Z_ALTITUDE_CONTROL &
@@ -146,7 +143,6 @@ NOINLINE void Sub::send_extended_status1(mavlink_channel_t chan)
     case VELHOLD:
     case CIRCLE:
     case SURFACE:
-    case OF_LOITER:
     case POSHOLD:
         control_sensors_enabled |= MAV_SYS_STATUS_SENSOR_Z_ALTITUDE_CONTROL;
         control_sensors_enabled |= MAV_SYS_STATUS_SENSOR_XY_POSITION_CONTROL;
@@ -182,9 +178,7 @@ NOINLINE void Sub::send_extended_status1(mavlink_channel_t chan)
         control_sensors_health |= MAV_SYS_STATUS_SENSOR_OPTICAL_FLOW;
     }
 #endif
-    if (ap.rc_receiver_present) {
-        control_sensors_health |= MAV_SYS_STATUS_SENSOR_RC_RECEIVER;
-    }
+
     if (!ins.get_gyro_health_all() || !ins.gyro_calibrated_ok_all()) {
         control_sensors_health &= ~MAV_SYS_STATUS_SENSOR_3D_GYRO;
     }
@@ -201,7 +195,8 @@ NOINLINE void Sub::send_extended_status1(mavlink_channel_t chan)
     int8_t battery_remaining = -1;
 
     if (battery.has_current() && battery.healthy()) {
-        battery_remaining = battery.capacity_remaining_pct();
+        // percent remaining is not necessarily accurate at the moment
+        //battery_remaining = battery.capacity_remaining_pct();
         battery_current = battery.current_amps() * 100;
     }
 
@@ -223,10 +218,10 @@ NOINLINE void Sub::send_extended_status1(mavlink_channel_t chan)
 #endif
 
 #if RANGEFINDER_ENABLED == ENABLED
-    if (rangefinder.num_sensors() > 0) {
+    if (rangefinder_state.enabled) {
         control_sensors_present |= MAV_SYS_STATUS_SENSOR_LASER_POSITION;
         control_sensors_enabled |= MAV_SYS_STATUS_SENSOR_LASER_POSITION;
-        if (rangefinder.has_data()) {
+        if (rangefinder.has_data_orient(ROTATION_PITCH_270)) {
             control_sensors_health |= MAV_SYS_STATUS_SENSOR_LASER_POSITION;
         }
     }
@@ -378,13 +373,13 @@ void NOINLINE Sub::send_current_waypoint(mavlink_channel_t chan)
 void NOINLINE Sub::send_rangefinder(mavlink_channel_t chan)
 {
     // exit immediately if rangefinder is disabled
-    if (!rangefinder.has_data()) {
+    if (!rangefinder.has_data_orient(ROTATION_PITCH_270)) {
         return;
     }
     mavlink_msg_rangefinder_send(
         chan,
-        rangefinder.distance_cm() * 0.01f,
-        rangefinder.voltage_mv() * 0.001f);
+        rangefinder.distance_cm_orient(ROTATION_PITCH_270) * 0.01f,
+        rangefinder.voltage_mv_orient(ROTATION_PITCH_270) * 0.001f);
 }
 #endif
 
@@ -982,11 +977,6 @@ void GCS_MAVLINK_Sub::handleMessage(mavlink_message_t* msg)
         break;
     }
 
-    case MAVLINK_MSG_ID_PARAM_REQUEST_READ: {       // MAV ID: 20
-        handle_param_request_read(msg);
-        break;
-    }
-
     case MAVLINK_MSG_ID_PARAM_REQUEST_LIST: {       // MAV ID: 21
         // mark the firmware version in the tlog
         send_text(MAV_SEVERITY_INFO, FIRMWARE_STRING);
@@ -1156,6 +1146,13 @@ void GCS_MAVLINK_Sub::handleMessage(mavlink_message_t* msg)
         mavlink_msg_command_long_decode(msg, &packet);
 
         switch (packet.command) {
+        case MAV_CMD_PREFLIGHT_STORAGE:
+            if (is_equal(packet.param1, 2.0f)) {
+                AP_Param::erase_all();
+                sub.gcs_send_text(MAV_SEVERITY_WARNING, "All parameters reset, reboot board");
+                result= MAV_RESULT_ACCEPTED;
+            }
+            break;
 
         case MAV_CMD_START_RX_PAIR:
             // initiate bind procedure
@@ -1172,12 +1169,11 @@ void GCS_MAVLINK_Sub::handleMessage(mavlink_message_t* msg)
             }
             break;
 
-            // Not supported in sub
-            //        case MAV_CMD_NAV_LAND:
-            //            if (sub.set_mode(LAND, MODE_REASON_GCS_COMMAND)) {
-            //                result = MAV_RESULT_ACCEPTED;
-            //            }
-            //            break;
+        case MAV_CMD_NAV_LAND:
+            if (sub.set_mode(SURFACE, MODE_REASON_GCS_COMMAND)) {
+                result = MAV_RESULT_ACCEPTED;
+            }
+            break;
 
         case MAV_CMD_CONDITION_YAW:
             // param1 : target angle [0-360]
@@ -1941,19 +1937,19 @@ void GCS_MAVLINK_Sub::handleMessage(mavlink_message_t* msg)
         break;
     }
 
-    case MAVLINK_MSG_ID_SETUP_SIGNING:
-        handle_setup_signing(msg);
-        break;
-
-    case MAVLINK_MSG_ID_SYS_STATUS:
+    case MAVLINK_MSG_ID_SYS_STATUS: {
         uint32_t MAV_SENSOR_WATER = 0x20000000;
         mavlink_sys_status_t packet;
         mavlink_msg_sys_status_decode(msg, &packet);
         if ((packet.onboard_control_sensors_enabled & MAV_SENSOR_WATER) && !(packet.onboard_control_sensors_health & MAV_SENSOR_WATER)) {
             sub.leak_detector.set_detect();
         }
+    }
         break;
 
+    default:
+        handle_common_message(msg);
+        break;
     }     // end switch
 } // end handle mavlink
 

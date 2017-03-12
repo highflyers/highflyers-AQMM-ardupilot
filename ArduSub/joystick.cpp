@@ -7,8 +7,6 @@
 namespace {
 int16_t mode_switch_pwm = 1100;
 float cam_tilt = 1500.0;
-float cam_tilt_goal = 1500.0;
-float cam_tilt_alpha = 0.97;
 int16_t lights1 = 1100;
 int16_t lights2 = 1100;
 int16_t rollTrim = 0;
@@ -87,7 +85,7 @@ void Sub::transform_manual_control_to_rc_override(int16_t x, int16_t y, int16_t 
     channels[4] = mode_switch_pwm;                                       // for testing only
     channels[5] = constrain_int16((x+xTrim)*rpyScale+rpyCenter,1100,1900);           // forward for ROV
     channels[6] = constrain_int16((y+yTrim)*rpyScale+rpyCenter,1100,1900);           // lateral for ROV
-    channels[7] = 0xffff;                                     // camera tilt (sent in camera_tilt_smooth)
+    channels[7] = cam_tilt;                                   // camera tilt
     channels[8] = lights1;                                    // lights 1
     channels[9] = lights2;                                    // lights 2
     channels[10] = video_switch;                              // video switch
@@ -160,7 +158,7 @@ void Sub::handle_jsbutton_press(uint8_t button, bool shift, bool held)
         toggle_mode = false;
         break;
     case JSButton::button_function_t::k_mount_center:
-        cam_tilt_goal = g.cam_tilt_center;
+        cam_tilt = g.cam_tilt_center;
         break;
     case JSButton::button_function_t::k_mount_tilt_up: {
         uint8_t i;
@@ -173,7 +171,7 @@ void Sub::handle_jsbutton_press(uint8_t button, bool shift, bool held)
             uint16_t min = ch->get_output_min();
             uint16_t max = ch->get_output_max();
 
-            cam_tilt_goal = constrain_int16(cam_tilt_goal-g.cam_tilt_step,min,max);
+            cam_tilt = constrain_int16(cam_tilt-g.cam_tilt_step,min,max);
         }
     }
     break;
@@ -188,7 +186,7 @@ void Sub::handle_jsbutton_press(uint8_t button, bool shift, bool held)
             uint16_t min = ch->get_output_min();
             uint16_t max = ch->get_output_max();
 
-            cam_tilt_goal = constrain_int16(cam_tilt_goal+g.cam_tilt_step,min,max);
+            cam_tilt = constrain_int16(cam_tilt+g.cam_tilt_step,min,max);
         }
     }
     break;
@@ -268,7 +266,7 @@ void Sub::handle_jsbutton_press(uint8_t button, bool shift, bool held)
             } else {
                 gain = 1.0f;
             }
-            gcs_send_text_fmt(MAV_SEVERITY_INFO,"#Gain: %2.0f%%",gain*100);
+            gcs_send_text_fmt(MAV_SEVERITY_INFO,"#Gain: %2.0f%%",(double)gain*100);
         }
         break;
     case JSButton::button_function_t::k_gain_inc:
@@ -284,7 +282,7 @@ void Sub::handle_jsbutton_press(uint8_t button, bool shift, bool held)
                 gain = constrain_float(gain + (g.maxGain-g.minGain)/(g.numGainSettings-1), g.minGain, g.maxGain);
             }
 
-            gcs_send_text_fmt(MAV_SEVERITY_INFO,"#Gain is %2.0f%%",gain*100);
+            gcs_send_text_fmt(MAV_SEVERITY_INFO,"#Gain is %2.0f%%",(double)gain*100);
         }
         break;
     case JSButton::button_function_t::k_gain_dec:
@@ -300,7 +298,7 @@ void Sub::handle_jsbutton_press(uint8_t button, bool shift, bool held)
                 gain = constrain_float(gain - (g.maxGain-g.minGain)/(g.numGainSettings-1), g.minGain, g.maxGain);
             }
 
-            gcs_send_text_fmt(MAV_SEVERITY_INFO,"#Gain is %2.0f%%",gain*100);
+            gcs_send_text_fmt(MAV_SEVERITY_INFO,"#Gain is %2.0f%%",(double)gain*100);
         }
         break;
     case JSButton::button_function_t::k_trim_roll_inc:
@@ -324,22 +322,26 @@ void Sub::handle_jsbutton_press(uint8_t button, bool shift, bool held)
         }
         break;
     case JSButton::button_function_t::k_relay_1_on:
-        // Not implemented
+        relay.on(0);
         break;
     case JSButton::button_function_t::k_relay_1_off:
-        // Not implemented
+        relay.off(0);
         break;
     case JSButton::button_function_t::k_relay_1_toggle:
-        // Not implemented
+        if (!held) {
+            relay.toggle(0);
+        }
         break;
     case JSButton::button_function_t::k_relay_2_on:
-        // Not implemented
+        relay.on(1);
         break;
     case JSButton::button_function_t::k_relay_2_off:
-        // Not implemented
+        relay.off(1);
         break;
     case JSButton::button_function_t::k_relay_2_toggle:
-        // Not implemented
+        if (!held) {
+            relay.toggle(1);
+        }
         break;
     case JSButton::button_function_t::k_custom_1:
         // Not implemented
@@ -418,23 +420,6 @@ JSButton* Sub::get_button(uint8_t index)
     default:
         return &g.jbtn_0;
     }
-}
-
-void Sub::camera_tilt_smooth()
-{
-    if (failsafe.manual_control) {
-        return;
-    }
-    int16_t channels[11];
-
-    for (uint8_t i = 0 ; i < 11 ; i++) {
-        channels[i] = 0xffff;
-    }
-    // Camera tilt low pass filter
-    cam_tilt = cam_tilt*cam_tilt_alpha+cam_tilt_goal*(1-cam_tilt_alpha);
-    channels[7] = cam_tilt;
-
-    failsafe.rc_override_active = hal.rcin->set_overrides(channels, 10);
 }
 
 void Sub::default_js_buttons()

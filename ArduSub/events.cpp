@@ -31,6 +31,7 @@ void Sub::failsafe_battery_event(void)
 
 void Sub::failsafe_manual_control_check()
 {
+#if CONFIG_HAL_BOARD != HAL_BOARD_SITL
     uint32_t tnow = AP_HAL::millis();
 
     // Require at least 2Hz update
@@ -46,6 +47,7 @@ void Sub::failsafe_manual_control_check()
     }
 
     failsafe.manual_control = false;
+#endif
 }
 
 void Sub::failsafe_internal_pressure_check()
@@ -70,8 +72,8 @@ void Sub::failsafe_internal_pressure_check()
         failsafe.internal_pressure = true;
     }
 
-    // Warn every 5 seconds
-    if (failsafe.internal_pressure && tnow > last_pressure_warn_ms + 5000) {
+    // Warn every 30 seconds
+    if (failsafe.internal_pressure && tnow > last_pressure_warn_ms + 30000) {
         last_pressure_warn_ms = tnow;
         gcs_send_text(MAV_SEVERITY_WARNING, "Internal pressure critical!");
     }
@@ -99,8 +101,8 @@ void Sub::failsafe_internal_temperature_check()
         failsafe.internal_temperature = true;
     }
 
-    // Warn every 5 seconds
-    if (failsafe.internal_temperature && tnow > last_temperature_warn_ms + 5000) {
+    // Warn every 30 seconds
+    if (failsafe.internal_temperature && tnow > last_temperature_warn_ms + 30000) {
         last_temperature_warn_ms = tnow;
         gcs_send_text(MAV_SEVERITY_WARNING, "Internal temperature critical!");
     }
@@ -122,8 +124,8 @@ void Sub::set_leak_status(bool status)
     uint32_t tnow = AP_HAL::millis();
 
     // We have a leak
-    // Always send a warning every 5 seconds
-    if (tnow > failsafe.last_leak_warn_ms + 5000) {
+    // Always send a warning every 20 seconds
+    if (tnow > failsafe.last_leak_warn_ms + 20000) {
         failsafe.last_leak_warn_ms = tnow;
         gcs_send_text(MAV_SEVERITY_CRITICAL, "Leak Detected");
     }
@@ -168,8 +170,8 @@ void Sub::failsafe_gcs_check()
     // GCS heartbeat has timed out
     //////////////////////////////
 
-    // Send a warning every 5 seconds
-    if (tnow > failsafe.last_gcs_warn_ms + 5000) {
+    // Send a warning every 30 seconds
+    if (tnow > failsafe.last_gcs_warn_ms + 30000) {
         failsafe.last_gcs_warn_ms = tnow;
         gcs_send_text_fmt(MAV_SEVERITY_WARNING, "MYGCS: %d, heartbeat lost", g.sysid_my_gcs);
     }
@@ -285,7 +287,7 @@ bool Sub::should_disarm_on_failsafe()
         return !ap.auto_armed;
         break;
     default:
-        // used for AltHold, Guided, Loiter, RTL, Circle, Drift, Sport, Flip, Autotune, PosHold
+        // used for AltHold, Guided, Loiter, RTL, Circle, Drift, Sport, Flip, PosHold
         // if landed disarm
         //            return ap.land_complete;
         return false;

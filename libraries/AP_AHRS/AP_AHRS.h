@@ -235,6 +235,9 @@ public:
     // return a smoothed and corrected gyro vector
     virtual const Vector3f &get_gyro(void) const = 0;
 
+    // return a smoothed and corrected gyro vector using the latest ins data (which may not have been consumed by the EKF yet)
+    Vector3f get_gyro_latest(void) const;
+
     // return the current estimate of the gyro drift
     virtual const Vector3f &get_gyro_drift(void) const = 0;
 
@@ -344,9 +347,7 @@ public:
 
     // return a Down position relative to home in meters
     // if EKF is unavailable will return the baro altitude
-    virtual void get_relative_position_D_home(float &posD) const {
-        return;
-    }
+    virtual void get_relative_position_D_home(float &posD) const = 0;
 
     // return a Down position relative to origin in meters
     // Return true if estimate is valid

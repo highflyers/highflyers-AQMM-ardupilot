@@ -19,8 +19,7 @@ enum ESCCalibrationModes {
 void Sub::esc_calibration_startup_check()
 {
     // exit immediately if pre-arm rc checks fail
-    pre_arm_rc_checks();
-    if (!ap.pre_arm_rc_check) {
+    if (!arming.rc_check()) {
         // clear esc flag for next time
         if ((g.esc_calibrate != ESCCAL_NONE) && (g.esc_calibrate != ESCCAL_DISABLED)) {
             g.esc_calibrate.set_and_save(ESCCAL_NONE);
@@ -91,10 +90,6 @@ void Sub::esc_calibration_passthrough()
 
         // flash LEDS
         AP_Notify::flags.esc_calibration = true;
-
-        // read pilot input
-        read_radio();
-        hal.scheduler->delay(10);
 
         // pass through to motors
         motors.set_throttle_passthrough_for_esc_calibration(channel_throttle->get_control_in() / 1000.0f);
