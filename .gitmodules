@@ -16,7 +16,6 @@
 [submodule "modules/mavlink"]
 	path = modules/mavlink
 	url = https://github.com/highflyers/highflyers-AQMM-mavlink.git
-	branch = AQMM
 [submodule "gtest"]
 	path = modules/gtest
 	url = git://github.com/ArduPilot/googletest

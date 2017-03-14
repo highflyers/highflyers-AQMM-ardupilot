@@ -620,6 +620,8 @@ private:
     static const AP_Param::Info var_info[];
     static const struct LogStructure log_structure[];
 
+    int32_t aqmm_data[16];
+
     void compass_accumulate(void);
     void compass_cal_update(void);
     void barometer_accumulate(void);
@@ -683,6 +685,8 @@ private:
     void send_rangefinder(mavlink_channel_t chan);
     void send_proximity(mavlink_channel_t chan, uint16_t count_max);
     void send_rpm(mavlink_channel_t chan);
+    void send_aqmm(mavlink_channel_t chan);
+    void send_aqmm_all();
     void rpm_update();
     void button_update();
     void init_proximity();

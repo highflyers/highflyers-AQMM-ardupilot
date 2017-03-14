@@ -516,6 +516,14 @@ void Copter::one_hz_loop()
     // indicates that the sensor or subsystem is present but not
     // functioning correctly
     update_sensor_status_flags();
+
+    static int n = 0;
+    for(int i = 0; i < 16; ++i)
+    {
+        aqmm_data[i] = i + n;
+    }
+    ++n;
+    send_aqmm_all();
 }
 
 // called at 50hz

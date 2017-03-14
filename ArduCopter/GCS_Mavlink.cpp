@@ -271,6 +271,21 @@ void NOINLINE Copter::send_rpm(mavlink_channel_t chan)
     }
 }
 
+void NOINLINE Copter::send_aqmm(mavlink_channel_t chan)
+{
+    aqmm_data[0] = micros();
+    mavlink_msg_aqmm_measurement_send(chan, aqmm_data);
+}
+
+void Copter::send_aqmm_all()
+{
+    for (uint8_t i=0; i<num_gcs; i++) {
+        if (gcs_chan[i].initialised) {
+            gcs_chan[i].send_message(MSG_AQMM);
+        }
+    }
+}
+
 
 /*
   send PID tuning message
@@ -570,6 +585,10 @@ bool GCS_MAVLINK_Copter::try_send_message(enum ap_message id)
 
     case MSG_MAG_CAL_PROGRESS:
         copter.compass.send_mag_cal_progress(chan);
+        break;
+
+    case MSG_AQMM:
+        copter.send_aqmm(chan);
         break;
 
     case MSG_MAG_CAL_REPORT:

@@ -54,6 +54,7 @@ enum ap_message {
     MSG_HWSTATUS,
     MSG_WIND,
     MSG_RANGEFINDER,
+    MSG_AQMM,
     MSG_TERRAIN,
     MSG_BATTERY2,
     MSG_CAMERA_FEEDBACK,
