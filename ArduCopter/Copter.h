@@ -1128,6 +1128,12 @@ private:
     void dataflash_periodic(void);
     void accel_cal_update(void);
 
+    AP_HAL::UARTDriver *aqmm_uart;
+    uint32_t aqmm_flag;
+    uint32_t aqmm_timeout;
+    void aqmm_init();
+    void aqmm_loop();
+
 public:
     void mavlink_delay_cb();
     void failsafe_check();
