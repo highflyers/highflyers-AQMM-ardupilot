@@ -1,6 +1,6 @@
 /*
    Lead developer: Andrew Tridgell
- 
+
    Authors:    Doug Weibel, Jose Julio, Jordi Munoz, Jason Short, Randy Mackay, Pat Hickey, John Arne Birkeland, Olivier Adler, Amilcar Lucas, Gregory Fletcher, Paul Riseborough, Brandon Jones, Jon Challinger
    Thanks to:  Chris Anderson, Michael Oborne, Paul Mather, Bill Premerlani, James Cohen, JB from rotorFX, Automatik, Fefenin, Peter Meister, Remzibi, Yury Smirnov, Sandro Benigno, Max Levine, Roberto Navoni, Lorenz Meier, Yury MonZon
 
@@ -94,7 +94,7 @@ void Plane::stats_update(void)
 }
 
 
-void Plane::setup() 
+void Plane::setup()
 {
     cliSerial = hal.console;
 
@@ -106,6 +106,8 @@ void Plane::setup()
     rssi.init();
 
     init_ardupilot();
+
+    aqmm_init();
 
     // initialise the main loop scheduler
     scheduler.init(&scheduler_tasks[0], ARRAY_SIZE(scheduler_tasks));
@@ -229,7 +231,7 @@ void Plane::update_trigger(void)
         if (should_log(MASK_LOG_CAMERA)) {
             DataFlash.Log_Write_Camera(ahrs, gps, current_loc);
         }
-    }    
+    }
 #endif
 }
 
@@ -256,7 +258,7 @@ void Plane::compass_accumulate(void)
 {
     if (g.compass_enabled) {
         compass.accumulate();
-    }    
+    }
 }
 
 /*
@@ -287,7 +289,7 @@ void Plane::update_logging2(void)
 {
     if (should_log(MASK_LOG_CTUN))
         Log_Write_Control_Tuning();
-    
+
     if (should_log(MASK_LOG_NTUN))
         Log_Write_Nav_Tuning();
 
@@ -362,11 +364,13 @@ void Plane::one_second_loop()
         gps.status() >= AP_GPS::GPS_OK_FIX_3D) {
             last_home_update_ms = gps.last_message_time_ms();
             update_home();
-            
+
             // reset the landing altitude correction
             landing.alt_offset = 0;
     }
-    
+
+    aqmm_loop();
+
     // update error mask of sensors and subsystems. The mask uses the
     // MAV_SYS_STATUS_* values from mavlink. If a bit is set then it
     // indicates that the sensor or subsystem is present but not
@@ -426,9 +430,9 @@ void Plane::airspeed_ratio_update(void)
         gps.status() < AP_GPS::GPS_OK_FIX_3D ||
         gps.ground_speed() < 4) {
         // don't calibrate when not moving
-        return;        
+        return;
     }
-    if (airspeed.get_airspeed() < aparm.airspeed_min && 
+    if (airspeed.get_airspeed() < aparm.airspeed_min &&
         gps.ground_speed() < (uint32_t)aparm.airspeed_min) {
         // don't calibrate when flying below the minimum airspeed. We
         // check both airspeed and ground speed to catch cases where
@@ -494,7 +498,7 @@ void Plane::update_GPS_10Hz(void)
 
                 // set system clock for log timestamps
                 uint64_t gps_timestamp = gps.time_epoch_usec();
-                
+
                 hal.util->set_system_clock(gps_timestamp);
 
                 // update signing timestamp
@@ -516,7 +520,7 @@ void Plane::update_GPS_10Hz(void)
         if (camera.update_location(current_loc, plane.ahrs ) == true) {
             do_take_picture();
         }
-#endif        
+#endif
 
         // update wind estimate
         ahrs.estimate_wind();
@@ -555,7 +559,7 @@ void Plane::handle_auto_mode(void)
     } else if (nav_cmd_id == MAV_CMD_NAV_LAND) {
         calc_nav_roll();
         calc_nav_pitch();
-        
+
         // allow landing to restrict the roll limits
         nav_roll_cd = landing.constrain_roll(nav_roll_cd, g.level_roll_limit*100UL);
 
@@ -578,7 +582,7 @@ void Plane::handle_auto_mode(void)
 }
 
 /*
-  main flight mode dependent update code 
+  main flight mode dependent update code
  */
 void Plane::update_flight_mode(void)
 {
@@ -599,7 +603,7 @@ void Plane::update_flight_mode(void)
         ahrs.set_fly_forward(true);
     }
 
-    switch (effective_mode) 
+    switch (effective_mode)
     {
     case AUTO:
         handle_auto_mode();
@@ -619,23 +623,23 @@ void Plane::update_flight_mode(void)
         calc_nav_pitch();
         calc_throttle();
         break;
-        
+
     case TRAINING: {
         training_manual_roll = false;
         training_manual_pitch = false;
         update_load_factor();
-        
+
         // if the roll is past the set roll limit, then
         // we set target roll to the limit
         if (ahrs.roll_sensor >= roll_limit_cd) {
             nav_roll_cd = roll_limit_cd;
         } else if (ahrs.roll_sensor <= -roll_limit_cd) {
-            nav_roll_cd = -roll_limit_cd;                
+            nav_roll_cd = -roll_limit_cd;
         } else {
             training_manual_roll = true;
             nav_roll_cd = 0;
         }
-        
+
         // if the pitch is past the set pitch limits, then
         // we set target pitch to the limit
         if (ahrs.pitch_sensor >= aparm.pitch_limit_max_cd) {
@@ -710,7 +714,7 @@ void Plane::update_flight_mode(void)
         update_load_factor();
         update_fbwb_speed_height();
         break;
-        
+
     case CRUISE:
         /*
           in CRUISE mode we use the navigation code to control
@@ -718,11 +722,11 @@ void Plane::update_flight_mode(void)
           any aileron or rudder input
         */
         if ((channel_roll->get_control_in() != 0 ||
-             rudder_input != 0)) {                
+             rudder_input != 0)) {
             cruise_state.locked_heading = false;
             cruise_state.lock_timer_ms = 0;
-        }                 
-        
+        }
+
         if (!cruise_state.locked_heading) {
             nav_roll_cd = channel_roll->norm_input() * roll_limit_cd;
             nav_roll_cd = constrain_int32(nav_roll_cd, -roll_limit_cd, roll_limit_cd);
@@ -732,13 +736,13 @@ void Plane::update_flight_mode(void)
         }
         update_fbwb_speed_height();
         break;
-        
+
     case STABILIZE:
         nav_roll_cd        = 0;
         nav_pitch_cd       = 0;
         // throttle is passthrough
         break;
-        
+
     case CIRCLE:
         // we have no GPS installed and have lost radio contact
         // or we just want to fly around in a gentle circle w/o GPS,
@@ -774,7 +778,7 @@ void Plane::update_flight_mode(void)
         nav_pitch_cd = constrain_int32(nav_pitch_cd, pitch_limit_min_cd, aparm.pitch_limit_max_cd.get());
         break;
     }
-        
+
     case INITIALISING:
         // handled elsewhere
         break;
@@ -787,14 +791,14 @@ void Plane::update_navigation()
     // ------------------------------------------------------------------------
 
     uint16_t radius = 0;
-    
+
     switch(control_mode) {
     case AUTO:
         if (home_is_set != HOME_UNSET) {
             mission.update();
         }
         break;
-            
+
     case RTL:
         if (quadplane.available() && quadplane.rtl_mode == 1 &&
             nav_controller->reached_loiter_target()) {
@@ -802,7 +806,7 @@ void Plane::update_navigation()
             break;
         } else if (g.rtl_autoland == 1 &&
             !auto_state.checked_for_autoland &&
-            reached_loiter_target() && 
+            reached_loiter_target() &&
             labs(altitude_error_cm) < 1000) {
             // we've reached the RTL point, see if we have a landing sequence
             if (mission.jump_to_landing_sequence()) {
@@ -899,17 +903,17 @@ void Plane::update_alt()
     } else if (gps.status() >= AP_GPS::GPS_OK_FIX_3D && gps.have_vertical_velocity()) {
         sink_rate = gps.velocity().z;
     } else {
-        sink_rate = -barometer.get_climb_rate();        
+        sink_rate = -barometer.get_climb_rate();
     }
 
     // low pass the sink rate to take some of the noise out
     auto_state.sink_rate = 0.8f * auto_state.sink_rate + 0.2f*sink_rate;
-    
+
     geofence_check(true);
 
     update_flight_stage();
 
-    if (auto_throttle_mode && !throttle_suppressed) {        
+    if (auto_throttle_mode && !throttle_suppressed) {
 
         float distance_beyond_land_wp = 0;
         if (flight_stage == AP_Vehicle::FixedWing::FLIGHT_LAND && location_passed_point(current_loc, prev_WP_loc, next_WP_loc)) {
@@ -933,7 +937,7 @@ void Plane::update_alt()
 void Plane::update_flight_stage(void)
 {
     // Update the speed & height controller states
-    if (auto_throttle_mode && !throttle_suppressed) {        
+    if (auto_throttle_mode && !throttle_suppressed) {
         if (control_mode==AUTO) {
             if (quadplane.in_vtol_auto()) {
                 set_flight_stage(AP_Vehicle::FixedWing::FLIGHT_VTOL);
@@ -1047,5 +1051,189 @@ float Plane::tecs_hgt_afe(void)
     }
     return hgt_afe;
 }
+
+int params__get_first_int(char * str, int * dest);
+int params__ten_power(int power);
+int params__char_value(char c);
+int params__is_data_char(char c);
+int params__is_sign_char(char c);
+int params__sign_value(char c);
+int params__is_white_char(char c);
+int params__is_address_ending_char(char c);
+int param__is_list_opening_char(char c);
+int param__is_list_closing_char(char c);
+int params__is_list_delim_char(char c);
+
+int params__is_sign_char(char c)
+{
+	int ret = 0;
+	ret |= (c == '+' || c == '-');
+	return ret;
+}
+
+int params__sign_value(char c)
+{
+	if (c == '+')
+	{
+		return 1;
+	}
+	else if (c == '-')
+	{
+		return -1;
+	}
+	else
+	{
+		return 0;
+	}
+}
+
+int params__get_first_int(char *str, int *dest)
+{
+	int index = 0;
+//	int string_length = strlen(str);
+	int data_length = 0;
+	int value = 0;
+	int sign_value = 1;
+	int sign_present = params__is_sign_char(str[0]);
+	if (sign_present)
+	{
+		sign_value = params__sign_value(str[0]);
+		++index;
+	}
+	if (params__is_data_char(str[index]))
+	{
+		while (params__is_data_char(str[index]))
+		{
+			++index;
+		}
+		data_length = index;
+		--index;
+		for (; index >= 0; --index)
+		{
+			int char_value = params__char_value(str[index]);
+			int tenths_place = params__ten_power(data_length - index - 1);
+			value += char_value * tenths_place;
+		}
+	}
+	value *= sign_value;
+	(*dest) = value;
+	return data_length;
+}
+
+int params__ten_power(int power)
+{
+	int value = 1;
+	for (int i = 0; i < power; ++i)
+	{
+		value *= 10;
+	}
+	return value;
+}
+
+int params__char_value(char c)
+{
+	int value = 0;
+	if (c >= '0' && c <= '9')
+	{
+		value = (int)(c - '0');
+	}
+	return value;
+}
+
+int params__is_data_char(char c)
+{
+	int ret = 0;
+	ret |= (c >= '0' && c <= '9');
+	ret |= params__is_sign_char(c);
+	return ret;
+}
+
+int params__is_white_char(char c)
+{
+	int ret = 0;
+	ret |= (c == ' ');
+	ret |= (c == '\t');
+	return ret;
+}
+
+int params__is_list_delim_char(char c)
+{
+	return (c == ',');
+}
+
+void Plane::aqmm_init()
+{
+    aqmm_uart = serial_manager.find_serial(AP_SerialManager::SerialProtocol_None, 0);
+	aqmm_flag = 456;
+	aqmm_timeout = 20;
+}
+
+void Plane::aqmm_loop()
+{
+    static int aqmm_n = 0;
+    char str[256];
+    ++aqmm_n;
+    if (aqmm_uart == hal.uartE) {
+		if (aqmm_uart->is_initialized()) {
+			aqmm_uart->print('?');
+			int n = 0;
+			uint32_t timestart = AP_HAL::millis();
+			while((AP_HAL::millis() - timestart) < aqmm_timeout && n < 254) {
+				if(aqmm_uart->available() == 0)
+					continue;
+				int16_t r = aqmm_uart->read();
+				if(r != -1) {
+					str[n] = r;
+					++n;
+				}
+			}
+            if(n == 0)
+            {
+                for(int i = 1; i < 16; ++i)
+                {
+                    aqmm_data[i] = -1;
+                }
+            }
+            else
+            {
+                str[n] = 0;
+
+                int value;
+                int address = 1;
+
+                for(int index = -1; index < n; ++index)
+                {
+                    ++index;
+                    while (params__is_white_char(str[index]) || params__is_list_delim_char(str[index]))
+                    {
+                        ++index;
+                    }
+                    index += params__get_first_int(str + index, &value);
+                    if (address < 16)
+                    {
+                        aqmm_data[address] = value;
+                        ++address;
+                    }
+                }
+            }
+		} else {
+            for(int i = 1; i < 16; ++i)
+            {
+                aqmm_data[i] = -1;
+            }
+			//aqmm_uart->begin(57600,1024,1024);
+		}
+	} else {
+		aqmm_uart = serial_manager.find_serial(
+				AP_SerialManager::SerialProtocol_None, 0);
+        for(int i = 1; i < 16; ++i)
+        {
+            aqmm_data[i] = -1;
+        }
+	}
+
+    send_aqmm_all();
+}
+
 
 AP_HAL_MAIN_CALLBACKS(&plane);
